@@ -1,0 +1,398 @@
+<!-- templates/index.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek Reasoner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 1rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .content-section {
+            flex: none;
+            height: calc(100vh - 150px);
+            overflow: hidden;
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .output-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            flex: none;
+            height: 150px;
+            overflow: hidden;
+        }
+
+        .output-box h2 {
+            color: #495057;
+            margin-bottom: 0.5rem;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .content-area {
+            height: calc(100% - 30px);
+            overflow-y: auto !important;
+            overflow-x: hidden;
+            padding: 0.5rem;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f1f1f1;
+        }
+
+        .content-area::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .content-area::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .content-area::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .content-area::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .input-section {
+            flex: none;
+            height: 100px;
+            position: sticky;
+            bottom: 0;
+            background-color: #fff;
+            padding: 0.25rem 0;
+            border-top: 1px solid #dee2e6;
+            margin-top: -10px;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 0.5rem;
+            max-width: 100%;
+        }
+
+        textarea {
+            height: 70px !important;
+            min-height: 70px !important;
+            max-height: 70px !important;
+            resize: none;
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        /* Mobile-specific styles */
+        @media (max-width: 768px) {
+            .container {
+                padding: 0.5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .content-section {
+                height: calc(100vh - 120px);
+            }
+            
+            .output-box:first-child {
+                height: 120px;
+            }
+            
+            .output-box:last-child {
+                height: calc(100vh - 320px);
+            }
+            
+            .input-section {
+                height: 80px;
+            }
+            
+            textarea {
+                height: 60px !important;
+                min-height: 60px !important;
+                max-height: 60px !important;
+            }
+        }
+
+        .chat-message {
+            margin: 8px 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-bubble {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 15px;
+            margin: 2px 0;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background-color: #007bff;
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .assistant-message {
+            align-self: flex-start;
+            background-color: #f0f0f0;
+            color: #333;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message-time {
+            font-size: 0.75rem;
+            color: #666;
+            margin: 2px 5px;
+            align-self: center;
+        }
+
+        /* 让 Responding 区域占据更多空间 */
+        .output-box:last-child {
+            flex: none;
+            height: calc(100vh - 380px);
+            overflow: hidden;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // 存储会话ID
+        const sessionId = '{{ session_id }}';
+        console.log('Session ID:', sessionId); // 添加调试日志
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>历史课智能导师</h1>
+        
+        <div class="content-section">
+            <div class="output-box">
+                <h2>问题分析</h2>
+                <div id="thinkingContent" class="content-area"></div>
+            </div>
+
+            <div class="output-box">
+                <h2>引导提问</h2>
+                <div id="respondingContent" class="content-area">
+                    <!-- 消息将在这里动态添加 -->
+                </div>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <div class="input-container">
+                <textarea 
+                    id="userPrompt" 
+                    placeholder="Enter your prompt here..."
+                    rows="2"
+                ></textarea>
+                <button onclick="getResponse()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function addMessage(content, isUser = false) {
+            const respondingContent = document.getElementById('respondingContent');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+
+            const bubble = document.createElement('div');
+            bubble.className = `message-bubble ${isUser ? 'user-message' : 'assistant-message'}`;
+            bubble.innerHTML = isUser ? content : marked.parse(content);
+
+            const time = document.createElement('div');
+            time.className = 'message-time';
+            time.textContent = new Date().toLocaleTimeString();
+
+            messageDiv.appendChild(time);
+            messageDiv.appendChild(bubble);
+            respondingContent.appendChild(messageDiv);
+
+            // 滚动到最新消息
+            respondingContent.scrollTop = respondingContent.scrollHeight;
+            
+            // 返回创建的消息元素，以便后续更新
+            return messageDiv;
+        }
+
+        async function getResponse() {
+            const promptInput = document.getElementById('userPrompt');
+            const thinkingContent = document.getElementById('thinkingContent');
+            const userPrompt = promptInput.value.trim();
+
+            if (!userPrompt) return;
+
+            // 清空之前的thinking内容
+            thinkingContent.innerHTML = '';
+
+            // Disable input and button while processing
+            const button = document.querySelector('button');
+            promptInput.disabled = true;
+            button.disabled = true;
+            button.textContent = 'Processing...';
+
+            // 添加用户消息
+            addMessage(userPrompt, true);
+            
+            // 预先创建助手消息的占位符
+            const assistantMessage = addMessage('', false);
+            const assistantBubble = assistantMessage.querySelector('.message-bubble');
+
+            try {
+                // 在 URL 中添加 session_id 参数
+                const eventSource = new EventSource(`/api/stream?prompt=${encodeURIComponent(userPrompt)}&session_id=${sessionId}`);
+                
+                let thinkingBuffer = '';
+                let respondingBuffer = '';
+
+                // 监听 thinking 事件
+                eventSource.addEventListener('thinking', function(e) {
+                    const data = JSON.parse(e.data);
+                    thinkingBuffer += data.content;
+                    thinkingContent.innerHTML = marked.parse(thinkingBuffer);
+                    thinkingContent.scrollTop = thinkingContent.scrollHeight;
+                });
+
+                // 监听 responding 事件
+                eventSource.addEventListener('responding', function(e) {
+                    const data = JSON.parse(e.data);
+                    respondingBuffer += data.content;
+                    assistantBubble.innerHTML = marked.parse(respondingBuffer);
+                    assistantMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                });
+
+                // 监听完成事件
+                eventSource.addEventListener('done', function(e) {
+                    eventSource.close();
+                    promptInput.value = '';
+                    promptInput.disabled = false;
+                    button.disabled = false;
+                    button.textContent = 'Send';
+                });
+
+                // 监听错误事件
+                eventSource.addEventListener('error', function(e) {
+                    console.error('EventSource error:', e);
+                    eventSource.close();
+                    if (respondingBuffer === '') {
+                        // 如果还没有收到任何响应，显示错误消息
+                        assistantBubble.innerHTML = 'Error: Connection lost';
+                    }
+                    promptInput.disabled = false;
+                    button.disabled = false;
+                    button.textContent = 'Send';
+                });
+
+            } catch (error) {
+                console.error('Error:', error);
+                assistantBubble.innerHTML = 'Error: ' + error.message;
+                promptInput.disabled = false;
+                button.disabled = false;
+                button.textContent = 'Send';
+            }
+        }
+
+        // Add keyboard shortcut (Enter to send, Shift+Enter for new line)
+        document.getElementById('userPrompt').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                getResponse();
+            }
+        });
+
+        // Adjust textarea height automatically
+        document.getElementById('userPrompt').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        // 添加加载历史记录的函数
+        async function loadChatHistory() {
+            try {
+                const response = await fetch(`/api/history/${sessionId}`);
+                const history = await response.json();
+                
+                // 清空现有消息
+                const respondingContent = document.getElementById('respondingContent');
+                respondingContent.innerHTML = '';
+                
+                // 显示历史消息
+                history.forEach(msg => {
+                    if (msg.type === 'user' || msg.type === 'assistant') {
+                        addMessage(msg.content, msg.type === 'user');
+                    } else if (msg.type === 'thinking') {
+                        // 可以选择是否显示历史thinking内容
+                        document.getElementById('thinkingContent').innerHTML = marked.parse(msg.content);
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading chat history:', error);
+            }
+        }
+
+        // 页面加载时加载历史记录
+        window.addEventListener('load', loadChatHistory);
+    </script>
+</body>
+</html>
