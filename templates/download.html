@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Chat History</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #333;
+        }
+
+        .button-container {
+            display: flex;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .download-button {
+            padding: 1rem 2rem;
+            font-size: 1.2rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .download-button:hover {
+            background-color: #0056b3;
+        }
+
+        .download-button:active {
+            transform: translateY(1px);
+        }
+
+        .status-message {
+            margin-top: 2rem;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Download Chat History</h1>
+        <div class="button-container">
+            <button id="socrate" class="download-button">Socrate</button>
+            <button id="thinkaloud" class="download-button">Thinkaloud</button>
+        </div>
+        <div id="statusMessage" class="status-message"></div>
+    </div>
+
+    <script>
+        document.getElementById('socrate').addEventListener('click', function() {
+            downloadChatHistory('socrate');
+        });
+
+        document.getElementById('thinkaloud').addEventListener('click', function() {
+            downloadChatHistory('thinkaloud');
+        });
+
+        function downloadChatHistory(type) {
+            const statusMessage = document.getElementById('statusMessage');
+            statusMessage.className = 'status-message';
+            statusMessage.textContent = 'Generating CSV file. Please wait...';
+            statusMessage.style.display = 'block';
+
+            fetch(`/download/${type}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to download chat history');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    // Create a URL for the blob
+                    const url = window.URL.createObjectURL(blob);
+                    
+                    // Create a temporary anchor element
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `${type}_chat_history.csv`;
+                    
+                    // Append to document body, click, and then remove
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    // Show success message
+                    statusMessage.textContent = 'Download successful!';
+                    statusMessage.classList.add('success');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    statusMessage.textContent = `Error: ${error.message}`;
+                    statusMessage.classList.add('error');
+                });
+        }
+    </script>
+</body>
+</html> 

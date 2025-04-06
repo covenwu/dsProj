@@ -35,39 +35,56 @@
         }
 
         .content-section {
-            flex: none;
-            height: calc(100vh - 50px);
+            flex: 5;
             overflow: hidden;
             margin-bottom: 1rem;
             display: flex;
             flex-direction: column;
         }
 
+        .content-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+
         .output-box {
             background-color: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 0.5rem;  /* 减小底部间隔 */
-            flex: 1;  /* 让引导提问框占满剩余空间 */
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
             overflow: hidden;
-            height: calc(100vh - 200px + 50%); /* 增加引导提问区的高度 */
+            min-height: 0;
+            margin: 0;
+            height: 100%;
         }
 
         .output-box h2 {
             color: #495057;
-            margin-bottom: 0.5rem;
+            margin: 0;
+            padding: 0.5rem;
             font-size: 1.2rem;
             flex-shrink: 0;
+            background-color: rgba(255, 255, 255, 0.1);
         }
 
         .content-area {
-            height: calc(100% - 30px);
+            flex: 1;
             overflow-y: auto !important;
             overflow-x: hidden;
             padding: 0.5rem;
             scrollbar-width: thin;
             scrollbar-color: #888 #f1f1f1;
+            min-height: 0;
+            margin: 0;
+
         }
 
         .content-area::-webkit-scrollbar {
@@ -90,33 +107,61 @@
         }
 
         .input-section {
-            flex: none;
-            height: 100px;
+            flex: 1;
             position: sticky;
             bottom: 0;
             background-color: #fff;
             padding: 0.25rem 0;
             border-top: 1px solid #dee2e6;
-            margin-top: -10px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
 
         .input-container {
             display: flex;
             gap: 0.5rem;
             max-width: 100%;
+            flex: 1;
+            min-height: 0;
+            height: 100%;
         }
 
         textarea {
-            height: 70px !important;
-            min-height: 70px !important;
-            max-height: 70px !important;
-            resize: none;
             flex: 1;
+            resize: none;
             padding: 0.5rem;
             border: 1px solid #ced4da;
             border-radius: 8px;
             font-size: 1rem;
             font-family: inherit;
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f1f1f1;
+            min-height: 0;
+            max-height: 100%; /* 限制最大高度 */
+        }
+
+        /* 自定义滚动条样式 */
+        textarea::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        textarea::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        textarea::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        textarea::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
 
         button {
@@ -187,6 +232,7 @@
             background-color: #007bff;
             color: white;
             border-bottom-right-radius: 5px;
+            white-space: pre-wrap; /* Preserve line breaks */
         }
 
         .assistant-message {
@@ -205,8 +251,9 @@
 
         /* 让 Responding 区域占据更多空间 */
         .output-box:last-child {
-            flex: none;
-            height: calc(100vh - 380px);
+            /* 移除固定高度限制，使用flex布局自动填充可用空间 */
+            flex: 1;
+            /* height: calc(100vh - 380px); */
             overflow: hidden;
         }
 
@@ -244,7 +291,7 @@
     <div class="container">
         <h1>历史课智能导师</h1>
         <div class="user-id" id="userIDDisplay">学号: {{ user_id }}</div>
-        <button class="logout-button" onclick="logout()">Logout</button>
+        <button class="logout-button" onclick="logout()">退出登录</button>
 
         <div class="content-section">
             <div class="output-box">
@@ -259,10 +306,10 @@
             <div class="input-container">
                 <textarea 
                     id="userPrompt" 
-                    placeholder="Enter your prompt here..."
+                    placeholder="请复制粘贴你要练习的历史题到这里..."
                     rows="2"
                 ></textarea>
-                <button onclick="getResponse()">Send</button>
+                <button onclick="getResponse()">发送</button>
             </div>
         </div>
     </div>
@@ -279,7 +326,14 @@
 
             const bubble = document.createElement('div');
             bubble.className = `message-bubble ${isUser ? 'user-message' : 'assistant-message'}`;
-            bubble.innerHTML = isUser ? content : marked.parse(content);
+            
+            if (isUser) {
+                // For user messages, preserve line breaks
+                bubble.textContent = content; // Use textContent instead of innerHTML for user messages
+            } else {
+                // For assistant messages, use markdown parsing
+                bubble.innerHTML = marked.parse(content);
+            }
 
             const time = document.createElement('div');
             time.className = 'message-time';
@@ -311,6 +365,10 @@
             // 添加用户消息
             addMessage(userPrompt, true);
             
+            // Clear input box immediately after sending
+            const userMessage = userPrompt; // Store message for API call
+            promptInput.value = '';
+            
             // 预先创建助手消息的占位符
             const assistantMessage = addMessage('', false);
             const assistantBubble = assistantMessage.querySelector('.message-bubble');
@@ -322,7 +380,7 @@
                 console.log(sessionStorage.getItem('userID'));
 
                 // Send request with userID
-                const eventSource = new EventSource(`/api/stream?prompt=${encodeURIComponent(userPrompt)}&userID=${userID}`);
+                const eventSource = new EventSource(`/api/stream?prompt=${encodeURIComponent(userMessage)}&userID=${userID}`);
                 
                 let respondingBuffer = '';
 
@@ -331,16 +389,16 @@
                     const data = JSON.parse(e.data);
                     respondingBuffer += data.content;
                     assistantBubble.innerHTML = marked.parse(respondingBuffer);
-                    assistantMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    // 移除自动滚动到最新消息的行为
+                    // assistantMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
                 });
 
                 // 监听完成事件
                 eventSource.addEventListener('done', function(e) {
                     eventSource.close();
-                    promptInput.value = ''; // 清空输入区
                     promptInput.disabled = false;
                     button.disabled = false;
-                    button.textContent = 'Send';
+                    button.textContent = '发送';
                 });
 
                 // 监听错误事件
@@ -367,9 +425,19 @@
 
         // Add keyboard shortcut (Enter to send, Shift+Enter for new line)
         document.getElementById('userPrompt').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // 只处理回车键
+            if (e.key === 'Enter') {
+                // 阻止默认行为，实现换行
                 e.preventDefault();
-                getResponse();
+                // 在光标位置插入换行符
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + '\n' + this.value.substring(end);
+                // 将光标位置设置在插入的换行符之后
+                this.selectionStart = this.selectionEnd = start + 1;
+                // 自动调整高度
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
             }
         });
 

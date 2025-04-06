@@ -8,9 +8,13 @@ import json
 import sqlite3
 from datetime import datetime
 import time
+from download_routes import download_bp  # Import the Blueprint from download_routes.py
 
 app = Flask(__name__)
 app.secret_key = '123456'  # Set a secret key for session management
+
+# Register the download blueprint
+app.register_blueprint(download_bp)
 
 # 数据库配置
 DATABASE = 'chat_history.db'
@@ -167,7 +171,7 @@ def stream():
                     # Handle the case where there is no conversation history
                     system_prompt = """
                     ##角色
-                    你是一位历史老师,与你交互的用户是中学生。请你根据用户提供的历史史料题,其中包括若干史料和若干题目(problem),为每个题目分别设计苏格拉底式引导问题链,确保每个问题链的核心问题(core question)数量控制在 2 - 3 个。
+                    你是一位历史老师,与你交互的用户是中学生。请你根据用户提供的练习题,其中包括若干史料和若干题目(problem),为每个题目分别设计苏格拉底式引导问题链,确保每个问题链的核心问题(core question)数量控制在 2 - 3 个。
 
                     ##技能
                     ###技能 1: 与学生互动答题
@@ -175,19 +179,19 @@ def stream():
 
                     2. 当收到用户答案后，判断答案正确性：
 
-                        2.1 若答案正确：直接展示下一个题目，展示后继续等待用户输入。
+                        2.1 若答案完全正确：直接展示下一个题目，展示后继续等待用户输入。
 
-                        2.2 若答案错误：从该题目对应的苏格拉底式引导问题链中取出第一个核心问题，直接显示问题内容，不附加任何假设性回答或解释，展示后等待用户输入。
+                        2.2 若答案不完全正确，或者错误：不直接显示正确答案，而是从该题目对应的苏格拉底式引导问题链中取出第一个核心问题，直接显示问题内容，也不附加任何假设性回答或解释，展示后等待用户输入。
 
-                    3. 收到针对引导问题的用户答案后，判断答案正确性：
+                    3. 收到针对引导核心问题的用户答案后，判断答案正确性：
 
                         3.1 若答案正确：继续展示同一问题链的下一个核心问题，展示后等待用户输入。
 
-                        3.2 若答案错误：先提示线索（如 "注意朝代时间顺序"），然后等待用户再次回答；若用户再次回答仍错误，直接给出正确答案并展示下一问题，展示后等待用户输入。
+                        3.2 若答案错误：先提示线索（如 "注意朝代时间顺序"），然后等待用户再次回答；若用户再次回答仍错误，直接给出正确答案并展示下一核心问题，展示后等待用户输入。
 
                     4. 当完成当前问题链的所有核心问题(core question)后，自动进入下一个题目(problem)。
 
-                    5. 所有题目结束后，用一句话总结学习成果并鼓励用户。
+                    5. 每个练习题的所有题目完成学习后，用一句话总结学习成果并鼓励用户，然后告知用户可以继续下一个练习题的学习或者退出系统。
 
                     ##限制
                     1. 严禁提前模拟回答任何问题，必须严格等待用户输入。
@@ -195,6 +199,9 @@ def stream():
                     2. 仅围绕用户提供的历史史料题展开互动，不回答与题目无关的话题。
 
                     3. 回答需按照上述技能要求的流程进行，不可偏离流程框架。
+                    
+                    ##注意
+                    1. 北魏在唐朝之前
                     """
                     messages = [{'role': 'system', 'content': system_prompt}]
                     messages.append({"role": "user", "content": user_prompt})
@@ -246,6 +253,14 @@ def get_history(user_id):
         return jsonify(history)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# Route for the download page
+@app.route('/download')
+def download_page():
+    user_id = session.get('userID')  # Get userID from the session
+    if not user_id:
+        return redirect(url_for('welcome'))  # Redirect to welcome if not logged in
+    return render_template('download.html', user_id=user_id)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
