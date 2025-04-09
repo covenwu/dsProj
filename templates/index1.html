@@ -317,7 +317,7 @@
 
     <script>
         function logout() {
-            window.location.href = '/logout'; // Redirect to logout route
+            window.location.href = '/logout'; // 修改为正确的路径 '/app1/logout'
         }
 
         function addMessage(content, isUser = false) {
@@ -376,13 +376,20 @@
 
                 console.log(sessionStorage.getItem('userID'));
 
-                // Send request with userID
-                const eventSource = new EventSource(`/api/stream?prompt=${encodeURIComponent(userPrompt)}&userID=${userID}`);
+                // 关闭之前可能存在的连接
+                if (window.eventSource) {
+                    window.eventSource.close();
+                    window.eventSource = null;
+                }
+
+                // 添加 /app1 前缀到 URL 
+                //revise '/app1/api...'
+                window.eventSource = new EventSource(`/api/stream?prompt=${encodeURIComponent(userPrompt)}&userID=${userID}`);
                 
                 let respondingBuffer = '';
 
                 // 监听 responding 事件
-                eventSource.addEventListener('responding', function(e) {
+                window.eventSource.addEventListener('responding', function(e) {
                     const data = JSON.parse(e.data);
                     
                     // Get current user's ID
@@ -392,46 +399,57 @@
                     if (data.user_id === currentUserID) {
                         respondingBuffer += data.content;
                         assistantBubble.innerHTML = marked.parse(respondingBuffer);
-                        //assistantMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                        // 滚动到底部
+                        document.getElementById('respondingContent').scrollTop = document.getElementById('respondingContent').scrollHeight;
                     } else {
                         console.log("Received message for another user, ignoring");
                     }
                 });
 
                 // 监听完成事件
-                eventSource.addEventListener('done', function(e) {
-                    const data = JSON.parse(e.data);
-                    
-                    // Check if the message is for the current user
-                    const currentUserID = sessionStorage.getItem('userID');
-                    if (data.user_id === currentUserID) {
-                        eventSource.close();
-                        promptInput.value = ''; // 清空输入区
-                        promptInput.disabled = false;
-                        button.disabled = false;
-                        button.textContent = '发送';
+                window.eventSource.addEventListener('done', function(e) {
+                    try {
+                        const data = e.data ? JSON.parse(e.data) : {};
+                        
+                        // Check if the message is for the current user
+                        const currentUserID = sessionStorage.getItem('userID');
+                        if (!data.user_id || data.user_id === currentUserID) {
+                            if (window.eventSource) {
+                                window.eventSource.close();
+                                window.eventSource = null;
+                            }
+                            promptInput.value = ''; // 清空输入区
+                            promptInput.disabled = false;
+                            button.disabled = false;
+                            button.textContent = '发送';
+                        }
+                    } catch (error) {
+                        console.error('Error in done event:', error);
+                        closeConnection();
                     }
                 });
 
                 // 监听错误事件
-                eventSource.addEventListener('error', function(e) {
+                window.eventSource.addEventListener('error', function(e) {
                     console.error('EventSource error:', e);
-                    eventSource.close();
+                    closeConnection();
                     
-                    const data = e.data ? JSON.parse(e.data) : {};
-                    const currentUserID = sessionStorage.getItem('userID');
-                    
-                    // Only show error if it's for this user
-                    if (!data.user_id || data.user_id === currentUserID) {
-                        if (respondingBuffer === '') {
-                            // 如果还没有收到任何响应，显示错误消息
-                            assistantBubble.innerHTML = 'Error: Connection lost';
-                        }
-                        promptInput.disabled = false;
-                        button.disabled = false;
-                        button.textContent = '发送';
+                    // 显示错误消息
+                    if (respondingBuffer === '') {
+                        assistantBubble.innerHTML = 'Error: Connection lost. Please try again.';
                     }
                 });
+
+                // 辅助函数：关闭连接并重置UI
+                function closeConnection() {
+                    if (window.eventSource) {
+                        window.eventSource.close();
+                        window.eventSource = null;
+                    }
+                    promptInput.disabled = false;
+                    button.disabled = false;
+                    button.textContent = '发送';
+                }
 
             } catch (error) {
                 console.error('Error:', error);
@@ -470,6 +488,7 @@
         async function loadChatHistory() {
             try {
                 const userID = sessionStorage.getItem('userID');
+                //revise '/app1/api/history...' 
                 const response = await fetch(`/api/history/${userID}`);
                 const history = await response.json();
                 

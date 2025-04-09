@@ -137,6 +137,8 @@ def index1():
 # Route for the root URL
 @app.route('/')
 def home():
+    #revise
+    #return redirect('/welcome1') 
     return redirect(url_for('welcome1'))  # Redirect to the welcome page
 
 @app.route('/set_user', methods=['POST'])
@@ -146,7 +148,8 @@ def set_user():
 
     # Initialize conversation history for the new user
     conversation_history[user_id] = []
-
+    #revise
+    #return redirect('/index1') 
     return redirect(url_for('index1'))  # Redirect to index page
 
 @app.route('/logout')
@@ -155,6 +158,8 @@ def logout():
     if user_id in conversation_history:
         del conversation_history[user_id]  # Remove user's conversation history
     session.pop('userID', None)  # Remove userID from session
+    #revise
+    #return redirect('/welcome1') 
     return redirect(url_for('welcome1'))  # Redirect to welcome page
 
 def format_sse(event, data, user_id):
@@ -184,109 +189,96 @@ def stream():
 
         def generate():
             try:
-                #global reasoning_content
-                #global user_problem
-                
                 # Get current problem state from database
-
-                # 构建包含历史对话的消息列表
-                messages = []
-                
                 problem_state = get_recent_message(user_id)[1]
                 problem_id = get_recent_message(user_id)[0]
                     
-                match problem_state:
-                    case "revise":
-                        
-                        problem_state = "answer"
-                        
-                        problem_id = problem_id + 1
-                                                
-                        
-                        yield format_sse("responding", {"content": "请先写下你对这道练习中每一问的答案，完成所有回答后，再点击发送按钮。"}, user_id)
-                        
-                        #user_problem = user_prompt
-
-                        
-                        # 更新对话历史
-                        conversation_history[user_id].append({"role": "user", "content": user_prompt})
-                        #苏格拉底问题1
-                        conversation_history[user_id].append({"role": "assistant", "content": "请先写下你的答案"})
-                        
-                        
-                        store_message(user_id, problem_id, problem_state, 'user', user_prompt)
-                        store_message(user_id, problem_id, problem_state, 'assistant', "请先写下你的答案")
-                        
-                        # Update problem_state in database
-                        #store_message(user_id, problem_id, "thinking", 'system', "State transition")
-                        
-                    case "answer":
-                        
-                        problem_state = "thinking"
+                if problem_state == "revise":
+                    problem_state = "answer"
+                    problem_id = problem_id + 1
+                                            
+                    yield f"event: responding\ndata: {json.dumps({'content': '请先写下你对这道练习中每一问的答案，完成所有回答后，再点击发送按钮。', 'user_id': user_id})}\n\n"
                     
-                        # Get the user's problem from their most recent message
-                        user_problem = get_recent_user_content(user_id)
+                    # 更新对话历史
+                    conversation_history[user_id].append({"role": "user", "content": user_prompt})
+                    conversation_history[user_id].append({"role": "assistant", "content": "请先写下你的答案"})
+                    
+                    store_message(user_id, problem_id, problem_state, 'user', user_prompt)
+                    store_message(user_id, problem_id, problem_state, 'assistant', "请先写下你的答案")
+                    
+                elif problem_state == "answer":
+                    problem_state = "thinking"
+                
+                    # Get the user's problem from their most recent message
+                    user_problem = get_recent_user_content(user_id)
+                    
+                    print(f"get user problem: {user_problem}")
+                    
+                    messages = [{"role": "user", "content": user_problem}]
                         
-                        print(f"get user problem: {user_problem}")
-                        
-                        messages =[{"role": "user", "content": user_problem}]
-                            
+                    # 安全包装 API 调用
+                    reasoning_content = ""
+                    try:
                         # 第一次 API 调用获取 reasoning
                         response = client.chat.completions.create(
-                            model="deepseek-r1-250120",
+                            model="deepseek-r1-250120", 
                             messages=messages,
                             stream=True
                         )
                         
-                        reasoning_content = ""
                         for chunk in response:
-                            # Check if choices exist and are not empty
-                            if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
-                                if hasattr(chunk.choices[0].delta, 'reasoning_content'):
-                                    delta = chunk.choices[0].delta.reasoning_content
+                            try:
+                                # Check if choices exist and are not empty
+                                if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+                                    delta = None
+                                    if hasattr(chunk.choices[0].delta, 'reasoning_content'):
+                                        delta = chunk.choices[0].delta.reasoning_content
                                     if delta:
                                         reasoning_content += delta
-                                        yield format_sse("responding", {"content": delta}, user_id)
-                            else:
-                                print("No choices found in the response.")  # Debugging output
-                                yield format_sse("error", {"content": "No choices found in the response."}, user_id)
-                                
-                        yield format_sse("responding", {"content": "\n\n请根据老师的分析过程,对照你之前写的答案，写出你之前答案中的错误是什么，说明错误的原因是什么,有什么学习收获。"}, user_id)
+                                        yield f"event: responding\ndata: {json.dumps({'content': delta, 'user_id': user_id})}\n\n"
+                            except Exception as chunk_err:
+                                print(f"Error processing chunk: {str(chunk_err)}")
+                                # 继续处理，不中断流
+                    except Exception as api_err:
+                        print(f"API error: {str(api_err)}")
+                        yield f"event: error\ndata: {json.dumps({'content': str(api_err), 'user_id': user_id})}\n\n"
+                        yield f"event: done\ndata: {json.dumps({'user_id': user_id})}\n\n"
+                        return
                         
-                        conversation_history[user_id].append({"role": "user", "content": user_prompt})
-                        #苏格拉底问题1
-                        conversation_history[user_id].append({"role": "assistant", "content": reasoning_content})
-                        
-                        # Update conversation history
-                        store_message(user_id, problem_id, problem_state, 'user', user_prompt)
-                        store_message(user_id, problem_id, problem_state, 'assistant', reasoning_content)
-                        
-                        # Update problem_state in database
-                        #store_message(user_id, problem_id, "revise", 'system', "State transition")
-                        
-                    case "thinking":
-                        
-                        problem_state = "revise"
-                        
-                        yield format_sse("responding", {"content": "恭喜你完成本题的学习，你可以进入下一练习题的学习，或者退出本系统。"}, user_id)
-                        
-                        conversation_history[user_id].append({"role": "user", "content": user_prompt})
-                        #苏格拉底问题1
-                        conversation_history[user_id].append({"role": "assistant", "content": "恭喜你完成本题的学习，你可以进入下一练习题的学习，或者退出本系统。"})
-                        
-                        store_message(user_id, problem_id, problem_state, 'user', user_prompt)
-                        store_message(user_id, problem_id, problem_state, 'assistant', "恭喜你完成本题的学习，你可以进入下一练习题的学习，或者退出本系统。")
-                        
-                        # Update problem_state in database to reset for next question
-                        #store_message(user_id, problem_id, "answer", 'system', "State transition")
+                    # 发送额外消息
+                    yield f"event: responding\ndata: {json.dumps({'content': '\n\n请根据老师的分析过程,对照你之前写的答案，写出你之前答案中的错误是什么，说明错误的原因是什么,有什么学习收获。', 'user_id': user_id})}\n\n"
+                    
+                    conversation_history[user_id].append({"role": "user", "content": user_prompt})
+                    conversation_history[user_id].append({"role": "assistant", "content": reasoning_content})
+                    
+                    # Update conversation history
+                    store_message(user_id, problem_id, problem_state, 'user', user_prompt)
+                    store_message(user_id, problem_id, problem_state, 'assistant', reasoning_content)
+                    
+                elif problem_state == "thinking":
+                    problem_state = "revise"
+                    
+                    yield f"event: responding\ndata: {json.dumps({'content': '恭喜你完成本题的学习，你可以进入下一练习题的学习，或者退出本系统。', 'user_id': user_id})}\n\n"
+                    
+                    conversation_history[user_id].append({"role": "user", "content": user_prompt})
+                    conversation_history[user_id].append({"role": "assistant", "content": "恭喜你完成本题的学习，你可以进入下一练习题的学习，或者退出本系统。"})
+                    
+                    store_message(user_id, problem_id, problem_state, 'user', user_prompt)
+                    store_message(user_id, problem_id, problem_state, 'assistant', "恭喜你完成本题的学习，你可以进入下一练习题的学习，或者退出本系统。")
                 
-                yield format_sse("done", {}, user_id)
+                # 确保发送完成事件
+                yield f"event: done\ndata: {json.dumps({'user_id': user_id})}\n\n"
                 
             except Exception as e:
                 print(f"Error in generate: {str(e)}")
-                yield format_sse("error", {"content": str(e)}, user_id)
+                yield f"event: error\ndata: {json.dumps({'content': str(e), 'user_id': user_id})}\n\n"
+                yield f"event: done\ndata: {json.dumps({'user_id': user_id})}\n\n"
 
-        return Response(generate(), mimetype='text/event-stream')
+        # 返回响应并添加必要的头部
+        response = Response(generate(), mimetype='text/event-stream')
+        response.headers.add('Cache-Control', 'no-cache')
+        response.headers.add('X-Accel-Buffering', 'no')  # 告诉 Nginx 不要缓冲
+        return response
     
     except Exception as e:
         print(f"Error in stream: {str(e)}")
