@@ -138,8 +138,8 @@ def index1():
 @app.route('/')
 def home():
     #revise
-    #return redirect('/welcome1') 
-    return redirect(url_for('welcome1'))  # Redirect to the welcome page
+    return redirect('/welcome1') 
+    #return redirect(url_for('welcome1'))  # Redirect to the welcome page
 
 @app.route('/set_user', methods=['POST'])
 def set_user():
