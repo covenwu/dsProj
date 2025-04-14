@@ -5,7 +5,9 @@ from openai import OpenAI
 import os
 import certifi
 import json
-import sqlite3
+import pymysql  # 替换sqlite3为pymysql
+from pymysql.cursors import DictCursor
+from dbutils.pooled_db import PooledDB  # 导入连接池
 from datetime import datetime
 import time
 from download_routes import download_bp  # Import the Blueprint from download_routes.py
@@ -16,50 +18,75 @@ app.secret_key = '123456'  # Set a secret key for session management
 # Register the download blueprint
 app.register_blueprint(download_bp)
 
-# 数据库配置
-DATABASE = 'chat_history.db'
+# MySQL配置
+DB_CONFIG = {
+    'host': 'localhost',
+    'port': 3306,
+    'user': 'chat_user',  # 生产环境用户
+    'password': '12345678',  # 生产环境密码
+    'database': 'que_system',  # 数据库名
+    'charset': 'utf8mb4'
+}
+
+# 创建数据库连接池
+pool = PooledDB(
+    creator=pymysql,
+    maxconnections=50,  # 最大连接数
+    mincached=5,        # 初始连接数
+    maxcached=20,       # 最大空闲连接数
+    blocking=True,      # 连接池满时是否阻塞等待
+    **DB_CONFIG
+)
+
+def get_connection():
+    """获取数据库连接"""
+    return pool.connection()
 
 def init_db():
     """初始化数据库"""
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor()
     # 创建对话记录表
-    c.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            message_type TEXT NOT NULL,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id VARCHAR(50) NOT NULL,
+            message_type VARCHAR(20) NOT NULL,
             content TEXT NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_user_id (user_id)
         )
     ''')
     conn.commit()
+    cursor.close()
     conn.close()
 
 def store_message(user_id, message_type, content):
     """存储消息到数据库"""
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
-    c.execute('''
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
         INSERT INTO conversations (user_id, message_type, content)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
     ''', (user_id, message_type, content))
     conn.commit()
+    cursor.close()
     conn.close()
 
 def fetch_user_history(user_id):
     """Fetch conversation history for a specific user"""
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
-    c.execute('''
+    conn = get_connection()
+    cursor = conn.cursor(DictCursor)  # 使用字典游标
+    cursor.execute('''
         SELECT message_type, content 
         FROM conversations 
-        WHERE user_id = ? 
+        WHERE user_id = %s 
         ORDER BY timestamp
     ''', (user_id,))
-    history = c.fetchall()
+    history = cursor.fetchall()
+    cursor.close()
     conn.close()
-    return [{'role': msg[0], 'content': msg[1]} for msg in history]
+    return [{'role': msg['message_type'], 'content': msg['content']} for msg in history]
 
 # 确保在应用启动时初始化数据库
 init_db()
@@ -175,7 +202,7 @@ def stream():
 
                     ##技能
                     ###技能 1: 与学生互动答题
-                    1. 清晰展示第一个题目，展示后即等待用户输入答案，不进行任何提前模拟回答或跳过用户输入的操作。
+                    1. 清晰展示第一个题目，展示后即等待用户输入答案，不进行任何提前模拟回答或跳过用户输入的操作，直接显示问题内容，也不附加任何假设性回答或解释，展示后等待用户输入。
 
                     2. 当收到用户答案后，判断答案正确性：
 
@@ -249,8 +276,23 @@ def stream():
 @app.route('/api/history/<user_id>')
 def get_history(user_id):
     try:
-        history = fetch_user_history(user_id)
-        return jsonify(history)
+        conn = get_connection()
+        cursor = conn.cursor(DictCursor)  # 使用字典游标
+        cursor.execute('''
+            SELECT message_type, content, timestamp 
+            FROM conversations 
+            WHERE user_id = %s 
+            ORDER BY timestamp
+        ''', (user_id,))
+        history = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        return jsonify([{
+            'role': msg['message_type'],
+            'content': msg['content'],
+            'timestamp': str(msg['timestamp'])
+        } for msg in history])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
